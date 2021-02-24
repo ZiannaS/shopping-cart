@@ -1,5 +1,17 @@
 # shopping_cart.py
 import datetime
+import os
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+from dotenv import dotenv_values
+
+config = dotenv_values(".env")
+SENDGRID_API = config["SENDGRID_API_KEY"]
+SENDER_ADDRESS = config["SENDER_ADDRESS"]
+TAX_RATE = float(config["TAX_RATE"])
+
+
+
 
 products = [
     {"id":1, "name": "Chocolate Sandwich Cookies", "department": "snacks", "aisle": "cookies cakes", "price": 3.50},
@@ -56,10 +68,11 @@ def add_to_cart(p):
     price = p["price"]
     my_cart.append((name, price))
 
-def output_bill():
+def output_bill(email_addr):
     now = datetime.datetime.now()
-    tax = 8.75
+    
     total = 0
+    item_string = ""
     print("---------------------------------------")
     print("ZEE GROCERY")
     print("WWW.ZEEGROCERY.COM")
@@ -70,15 +83,39 @@ def output_bill():
     for item in my_cart:
         total += item[1]
         print('...', item[0], '(' + to_usd(item[1]) + ')')
+        item_string += '<li> ' + item[0] + ' (' + to_usd(item[1]) + ')' + '</li>'
     
     print("---------------------------------------")
     print("SUBTOTAL", to_usd(total))
-    print("TAX", to_usd(total * 8.75 / 100 ))
-    print("TOTAL", to_usd((total) + (total * 8.75 / 100)))
+    print("TAX", to_usd(total * TAX_RATE / 100 ))
+    print("TOTAL", to_usd((total) + (total * TAX_RATE / 100)))
     print("---------------------------------------")
     print("THANKS, SEE YOU AGAIN!")
     print("---------------------------------------")
+
+    email_receipt = "<h2> You Have Ordered </h2> <br /> Date " + now.strftime("%Y-%m-%d %H:%M:%S") + '<br />' + '<ol>' +item_string + '</ol>' + '<br />' "Sub Total: " + to_usd(total) + '<br />' + "Sales Tax: " + to_usd(total * TAX_RATE / 100 ) +'<br />' + "Total: " + to_usd((total) + (total * TAX_RATE / 100))
+    if email_addr != None:
+        send_email(email_receipt, email_addr)
+    
     return
+
+def send_email(html_content, email_addr):
+    client = SendGridAPIClient(SENDGRID_API)
+    subject = "Your Receipt from the Green Grocery Store"
+    message = Mail(from_email=SENDER_ADDRESS, to_emails=email_addr, subject=subject, html_content=html_content)
+
+    try:
+        response = client.send(message)
+        print("RESPONSE:", type(response)) #> <class 'python_http_client.client.Response'>
+        if int(response.status_code) == 202:
+            print("Your receipt has been emailed to you!")
+        else:
+            print("There seems to be an error in emailing your receipt, we apologize for the inconvenience.")
+        print(response.status_code) #> 202 indicates SUCCESS
+        
+    except Exception as err:
+        print("There seems to be an error in emailing your receipt, we apologize for the inconvenience.")
+
 
 def main():
     print("CHECKOUT")
@@ -87,7 +124,17 @@ def main():
     while True: 
         p_id = input("Please Enter A Product ID: ")
         if p_id == "DONE":
-            output_bill()
+            while True:
+                email_recpt = input("Would you like to receive an email_recipt (yes/no)?")
+                if email_recpt == "yes": 
+                    email_addr = input("please input your email address: ")
+                    output_bill(email_addr)
+                    break
+                elif email_recpt == "no":
+                    output_bill(None)
+                    break
+                else:
+                    print("Oops I did not understand that, please type (yes/no)")
             return
         try:
             p_id = int(p_id)
